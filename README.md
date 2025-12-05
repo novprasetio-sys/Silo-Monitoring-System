@@ -1,33 +1,48 @@
-# Silo-Monitoring-System
-This system for allerting and notify the silo level. Using arduino nano + ultrasonic sensor and display the measurement to Python GUI
+Silo-Monitoring-System
 
-Silo Ultrasonic Monitoring – Arduino + Python GUI
+Sistem sederhana untuk memonitor level silo menggunakan Arduino Nano + sensor ultrasonic HC-SR04, dan menampilkan jarak serta level pada Python GUI (Tkinter).
 
-Real-Mode · HC-SR04 · Tkinter GUI · Industrial Mapping
+Mode: Real Mode · Sensor: HC-SR04 · GUI: Tkinter · Mapping: Linear industrial (10–280 cm)
 
+Ringkasan
 
----
+Sistem ini membaca jarak aktual (cm) dari sensor HC-SR04 yang dipasang di bagian atas silo. Data dikirim lewat serial USB ke komputer yang menjalankan aplikasi Python. Aplikasi menampilkan jarak (cm) dan persentase level (0–100%) dengan logika industri:
 
-Sistem monitoring level silo berbasis sensor ultrasonic HC-SR04.
-Arduino membaca jarak aktual (cm), Python menampilkan:
+280 cm = 0% (silo kosong)
 
-Distance (cm)
+≤ 10 cm = 100% (silo penuh)
 
-Level (%) dengan logika real industri
+Mapping linear antara 10 — 280 cm
 
-280 cm = 0% (kosong)
+Indikator visual berubah warna dari hijau (normal) menjadi merah saat level ≥ 90%.
 
-≤10 cm = 100% (penuh)
+Tujuan: implementasi yang sederhana, stabil, dan mudah didokumentasikan di repository.
 
-Linear mapping 10–280 cm
+Hardware
 
+Arduino Nano (atau board kompatibel)
 
-Indikator Hijau (normal) → Merah (≥90%)
+HC-SR04 ultrasonic sensor
 
+Kabel jumper, breadboard (opsional)
 
-Proyek ini dirancang untuk implementasi sederhana, stabil, dan mudah untuk dokumentasi hardware.
+Kabel USB untuk serial
 
-# Arduino Codes
+Wiring (HC-SR04 ↔ Arduino)
+
+VCC → 5V
+
+GND → GND
+
+TRIG → D2
+
+ECHO → D3
+
+Catatan: Pastikan sensor dipasang tegak lurus ke permukaan material dan tidak terlalu dekat ke dinding silo yang dapat memantulkan gelombang.
+
+Arduino (Satu file: silo_monitor.ino)
+
+Kode ini membaca jarak, menghitung jarak dalam cm, dan mengirimkan melalui serial.
 
 #define TRIG 2
 #define ECHO 3
@@ -49,7 +64,7 @@ float getDistance() {
   digitalWrite(TRIG, LOW);
 
   duration = pulseIn(ECHO, HIGH, 30000);  // timeout 30ms (~5m)
-  if (duration == 0) return -1;           // tidak ada echo
+  if (duration == 0) return -1;           // tidak ada echo (out of range)
 
   float dist = duration * 0.0343 / 2;
   return dist;
@@ -61,29 +76,43 @@ void loop() {
   if (distance_cm < 0) {
     Serial.println("ERR");
   } else {
-    Serial.print(distance_cm);
+    Serial.print(distance_cm, 1);
     Serial.println("cm");
   }
 
-  delay(50);
+  delay(50); // 20 Hz sampling
 }
 
+Catatan kode Arduino
 
-# Python Codes
+pulseIn menggunakan timeout 30 ms untuk menghindari blocking terlalu lama.
+
+Output berupa ERR jika tidak terdeteksi echo; format jarak misal 123.4cm.
+
+Python GUI (Satu file: silo_gui.py)
+
+Aplikasi Python membaca serial, mem-parse data, memetakan ke persen, dan menampilkan GUI sederhana.
 
 import serial
 import tkinter as tk
+import sys
 
-try:
-    ser = serial.Serial('COM5', 9600, timeout=0.5)
-except:
-    ser = None
+# Ubah PORT sesuai OS: 'COM5' (Windows) atau '/dev/ttyUSB0' (Linux)
+PORT = 'COM5'
+BAUD = 9600
 
-MAX_DIST = 280.0  # silo kosong
-FULL_DIST = 10.0  # silo penuh
+MAX_DIST = 280.0  # cm -> 0%
+FULL_DIST = 10.0  # cm -> 100%
 
 smoothed = 0.0
-alpha = 0.3
+alpha = 0.3  # smoothing factor (0-1)
+
+# Serial init
+try:
+    ser = serial.Serial(PORT, BAUD, timeout=0.5)
+except Exception as e:
+    ser = None
+    print(f"Warning: cannot open serial port {PORT}: {e}", file=sys.stderr)
 
 
 def parse_distance(line):
@@ -91,14 +120,17 @@ def parse_distance(line):
         return None
 
     line = line.strip()
+    if not line:
+        return None
+
     if line.upper() == "ERR":
         return None
 
     try:
-        if "cm" in line:
-            line = line.replace("cm", "")
+        if line.endswith('cm'):
+            line = line[:-2]
         return float(line)
-    except:
+    except Exception:
         return None
 
 
@@ -108,24 +140,23 @@ def convert_to_percent(distance):
 
     if distance >= MAX_DIST:
         return 0
-
     if distance <= FULL_DIST:
         return 100
 
     level = (MAX_DIST - distance) / (MAX_DIST - FULL_DIST) * 100
-
-    if level < 0: level = 0
-    if level > 100: level = 100
-
+    level = max(0.0, min(100.0, level))
     return level
 
 
 def update():
     global smoothed
 
-    raw_line = ""
+    raw_line = ''
     if ser and ser.in_waiting:
-        raw_line = ser.readline().decode(errors='ignore').strip()
+        try:
+            raw_line = ser.readline().decode(errors='ignore').strip()
+        except Exception:
+            raw_line = ''
 
     dist = parse_distance(raw_line)
     percent = convert_to_percent(dist)
@@ -148,25 +179,69 @@ def update():
     root.after(50, update)
 
 
-root = tk.Tk()
-root.title("Silo Monitoring – Real Mode")
-root.config(bg="#1e1e1e")
+if __name__ == '__main__':
+    root = tk.Tk()
+    root.title("Silo Monitoring – Real Mode")
+    root.config(bg="#1e1e1e")
 
-tk.Label(root, text="Distance:", fg="white", bg="#1e1e1e",
-         font=("Segoe UI", 14)).pack(pady=(10, 0))
-label_distance = tk.Label(root, text="- cm", fg="cyan", bg="#1e1e1e",
-                          font=("Segoe UI", 28))
-label_distance.pack()
+    tk.Label(root, text="Distance:", fg="white", bg="#1e1e1e",
+             font=("Segoe UI", 14)).pack(pady=(10, 0))
+    label_distance = tk.Label(root, text="- cm", fg="cyan", bg="#1e1e1e",
+                              font=("Segoe UI", 28))
+    label_distance.pack()
 
-tk.Label(root, text="Level:", fg="white", bg="#1e1e1e",
-         font=("Segoe UI", 14)).pack(pady=(15, 0))
-label_percent = tk.Label(root, text="0%", fg="cyan", bg="#1e1e1e",
-                         font=("Segoe UI", 44, "bold"))
-label_percent.pack(pady=5)
+    tk.Label(root, text="Level:", fg="white", bg="#1e1e1e",
+             font=("Segoe UI", 14)).pack(pady=(15, 0))
+    label_percent = tk.Label(root, text="0%", fg="cyan", bg="#1e1e1e",
+                             font=("Segoe UI", 44, "bold"))
+    label_percent.pack(pady=5)
 
-canvas = tk.Canvas(root, width=160, height=160, bg="#1e1e1e", highlightthickness=0)
-canvas.pack(pady=10)
-circle = canvas.create_oval(10, 10, 150, 150, fill="#4CFF72", outline="")
+    canvas = tk.Canvas(root, width=160, height=160, bg="#1e1e1e", highlightthickness=0)
+    canvas.pack(pady=10)
+    circle = canvas.create_oval(10, 10, 150, 150, fill="#4CFF72", outline="")
 
-root.after(100, update)
-root.mainloop()
+    root.after(100, update)
+    root.mainloop()
+
+Catatan Python
+
+Ubah variabel PORT sesuai port serial di sistem anda.
+
+Jika serial tidak tersedia, aplikasi tetap jalan (akan menampilkan ERR).
+
+Parameter alpha mengatur smoothing; nilai kecil → lebih lambat merespon, nilai besar → respons cepat tapi lebih noisy.
+
+root.after(50, update) ~ 20 FPS GUI update. Sesuaikan jika perlu.
+
+Saran perbaikan & pengujian
+
+Tambahkan opsi konfigurasi via command-line (port, baud, max/fill distances).
+
+Logging ke file CSV untuk debugging/history.
+
+Validasi dan filter outlier (misbaca echo di dekat dinding).
+
+Tambahkan mode kalibrasi untuk mengukur FULL_DIST dan MAX_DIST langsung dari GUI.
+
+File yang disarankan di repo
+
+README.md (ringkasan + wiring + instruksi singkat)
+
+silo_monitor.ino (kode Arduino)
+
+silo_gui.py (kode Python GUI)
+
+LICENSE (misal MIT)
+
+Lisensi
+
+Lisensi minimal: MIT (sesuaikan jika perlu).
+
+Terima kasih — jika mau aku juga bisa:
+
+Buat versi GUI dengan tema terang gelap
+
+Tambah CSV logging atau upload ke Thingspeak
+
+Buat dokumentasi gambar wiring (PNG atau SVG)
+
