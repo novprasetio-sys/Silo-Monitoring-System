@@ -27,7 +27,7 @@ Indikator Hijau (normal) → Merah (≥90%)
 
 Proyek ini dirancang untuk implementasi sederhana, stabil, dan mudah untuk dokumentasi hardware.
 
-// Arduino Codes
+# Arduino Codes
 
 #define TRIG 2
 #define ECHO 3
