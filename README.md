@@ -223,25 +223,4 @@ Validasi dan filter outlier (misbaca echo di dekat dinding).
 
 Tambahkan mode kalibrasi untuk mengukur FULL_DIST dan MAX_DIST langsung dari GUI.
 
-File yang disarankan di repo
-
-README.md (ringkasan + wiring + instruksi singkat)
-
-silo_monitor.ino (kode Arduino)
-
-silo_gui.py (kode Python GUI)
-
-LICENSE (misal MIT)
-
-Lisensi
-
-Lisensi minimal: MIT (sesuaikan jika perlu).
-
-Terima kasih — jika mau aku juga bisa:
-
-Buat versi GUI dengan tema terang gelap
-
-Tambah CSV logging atau upload ke Thingspeak
-
-Buat dokumentasi gambar wiring (PNG atau SVG)
 
