@@ -1,0 +1,37 @@
+#define TRIG 2
+#define ECHO 3
+long duration;
+float distance_cm;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+}
+
+float getDistance() {
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(3);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+
+  duration = pulseIn(ECHO, HIGH, 30000); // timeout 30ms (~5m)
+
+  if (duration == 0) return -1; // tidak ada echo (out of range)
+
+  float dist = duration * 0.0343 / 2;
+  return dist;
+}
+
+void loop() {
+  distance_cm = getDistance();
+  if (distance_cm < 0) {
+    Serial.println("ERR");
+  } else {
+    Serial.print(distance_cm, 1);
+    Serial.println("cm");
+  }
+  delay(50); // 20 Hz sampling
+}
+
